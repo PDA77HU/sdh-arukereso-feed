@@ -1,5 +1,4 @@
 name: Árukereső feed frissítése
-# Próbafutás: 2026-11-11
 
 on:
   schedule:
