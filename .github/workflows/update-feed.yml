@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: "15 13 * * *"   # minden nap 13:15 UTC = 14:15 (télen) / 15:15 (nyáron) magyar idő, az Árukereső 16:00-s letöltése előtt
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/update-feed.yml"]
 
 permissions:
   contents: write
