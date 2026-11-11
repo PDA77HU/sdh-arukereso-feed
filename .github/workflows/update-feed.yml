@@ -1,0 +1,53 @@
+name: Árukereső feed frissítése
+
+on:
+  schedule:
+    - cron: "15 13 * * *"   # minden nap 13:15 UTC = 14:15 (télen) / 15:15 (nyáron) magyar idő, az Árukereső 16:00-s letöltése előtt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: feed
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Feed letöltése a boltból
+        run: |
+          set -euo pipefail
+          URL="https://sexdolleurope.com/collections/keszletrol?view=arukereso"
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS -o new.xml -w '%{http_code}' -A "Mozilla/5.0 (compatible; sdh-feed-mirror/1.0)" "$URL" || echo 000)
+            [ "$code" = "200" ] && break
+            echo "Próbálkozás $i: HTTP $code, várakozás..."; sleep $((i*60))
+          done
+          [ "$code" = "200" ] || { echo "Nem sikerült letölteni (HTTP $code)"; exit 1; }
+
+      - name: Ellenőrzés (érvényes XML, legalább 1 termék)
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET, sys
+          root = ET.parse("new.xml").getroot()
+          n = len(root.findall("product"))
+          if root.tag != "products" or n < 1:
+              sys.exit(f"Hibás feed: gyökér={root.tag}, termékek={n}")
+          print(f"OK, {n} termék")
+          PY
+
+      - name: Mentés, ha változott
+        run: |
+          mv new.xml arukereso.xml
+          if git diff --quiet -- arukereso.xml 2>/dev/null && git ls-files --error-unmatch arukereso.xml >/dev/null 2>&1; then
+            echo "Nincs változás."; exit 0
+          fi
+          git config user.name "sdh-feed-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add arukereso.xml
+          git commit -m "Feed frissítve $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push
